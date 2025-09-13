@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>BDD Test Runner</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #summary { border: 2px solid #333; padding: 10px; margin-bottom: 20px; }
+    .feature { margin: 10px 0; border: 2px solid #333; border-radius: 6px; }
+    .feature-header { background: #333; color: white; padding: 6px; cursor: pointer; }
+    .feature-content { display: none; padding: 6px; }
+    .scenario { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
+    .scenario.running { background: #fff3cd; }
+    .scenario.passed { background: #d4edda; color: #155724; }
+    .scenario.failed { background: #f8d7da; color: #721c24; }
+    .step { margin-left: 20px; padding: 3px; }
+    .step.passed { color: green; }
+    .step.failed { color: red; font-weight: bold; }
+    .step.skipped { color: #999; }
+    #log { background:#f0f0f0; padding:8px; height:150px; overflow:auto; white-space:pre-wrap; }
+    button { padding:8px 12px; font-size:16px; }
+  </style>
+</head>
+<body>
+  <h1>BDD Test Runner</h1>
+  <button onclick="startTests()">Run Tests</button>
+  <p id="status">Idle</p>
+
+  <!-- Summary Panel -->
+  <div id="summary">
+    <h2>Live Summary</h2>
+    <p><strong>Features:</strong> <span id="features"></span></p>
+    <p><strong>Scenarios:</strong> <span id="scenarios"></span></p>
+    <p><strong>Steps:</strong> <span id="steps"></span></p>
+  </div>
+
+  <div id="log"></div>
+
+  <h2>Features</h2>
+  <div id="featuresContainer"></div>
+
+  <script>
+    const socket = io();
+
+    function startTests() {
+      document.getElementById("featuresContainer").innerHTML = "";
+      document.getElementById("log").innerText = "";
+      document.getElementById("features").innerText = "";
+      document.getElementById("scenarios").innerText = "";
+      document.getElementById("steps").innerText = "";
+      socket.emit("start");
+    }
+
+    function toggleFeature(id) {
+      const content = document.getElementById(id + "_content");
+      content.style.display = (content.style.display === "none") ? "block" : "none";
+    }
+
+    socket.on("status", data => {
+      document.getElementById("status").innerText = data.msg;
+    });
+
+    socket.on("log", data => {
+      const log = document.getElementById("log");
+      log.innerText += data.line + "\n";
+      log.scrollTop = log.scrollHeight;
+    });
+
+    socket.on("scenario", data => {
+      const featureId = data.feature.replace(/\s+/g, "_");
+      const scenarioId = featureId + "_" + data.scenario.replace(/\s+/g, "_");
+
+      let featureDiv = document.getElementById(featureId);
+      if (!featureDiv) {
+        featureDiv = document.createElement("div");
+        featureDiv.id = featureId;
+        featureDiv.className = "feature";
+        featureDiv.innerHTML = `
+          <div class="feature-header" onclick="toggleFeature('${featureId}')">
+            ${data.feature}
+          </div>
+          <div id="${featureId}_content" class="feature-content"></div>
+        `;
+        document.getElementById("featuresContainer").appendChild(featureDiv);
+      }
+
+      let scenarioDiv = document.getElementById(scenarioId);
+      if (!scenarioDiv) {
+        scenarioDiv = document.createElement("div");
+        scenarioDiv.id = scenarioId;
+        scenarioDiv.className = "scenario " + data.status;
+        scenarioDiv.innerHTML = `
+          <strong>${data.scenario}</strong>
+          <div class="steps"></div>
+        `;
+        document.getElementById(featureId + "_content").appendChild(scenarioDiv);
+      }
+      scenarioDiv.className = "scenario " + data.status;
+    });
+
+    socket.on("step", data => {
+      const featureId = data.feature.replace(/\s+/g, "_");
+      const scenarioId = featureId + "_" + data.scenario.replace(/\s+/g, "_");
+      let scenarioDiv = document.getElementById(scenarioId);
+      if (scenarioDiv) {
+        const stepsDiv = scenarioDiv.querySelector(".steps");
+        const stepDiv = document.createElement("div");
+        stepDiv.className = "step " + data.status;
+        stepDiv.innerText = `${data.step} → ${data.status.toUpperCase()} (${data.duration})`;
+        stepsDiv.appendChild(stepDiv);
+      }
+    });
+
+    socket.on("summary", data => {
+      document.getElementById("features").innerText =
+        `${data.features.total} total | ✅ ${data.features.passed} | ❌ ${data.features.failed}`;
+      document.getElementById("scenarios").innerText =
+        `${data.scenarios.total} total | ✅ ${data.scenarios.passed} | ❌ ${data.scenarios.failed}`;
+      document.getElementById("steps").innerText =
+        `${data.steps.total} total | ✅ ${data.steps.passed} | ❌ ${data.steps.failed} | ⏭️ ${data.steps.skipped}`;
+    });
+
+    socket.on("done", data => {
+      document.getElementById("status").innerText = data.msg;
+    });
+  </script>
+</body>
+</html>
