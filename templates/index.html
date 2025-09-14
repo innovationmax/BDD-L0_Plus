@@ -8,8 +8,8 @@
     body { font-family: Arial, sans-serif; margin: 20px; }
     #summary { border: 2px solid #333; padding: 10px; margin-bottom: 20px; }
     .feature { margin: 10px 0; border: 2px solid #333; border-radius: 6px; }
-    .feature-header { background: #333; color: white; padding: 6px; cursor: pointer; }
-    .feature-content { display: none; padding: 6px; }
+    .feature-header { background: #333; color: white; padding: 6px; }
+    .feature-content { display: block; padding: 6px; } /* always visible */
     .scenario { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 8px; }
     .scenario.running { background: #fff3cd; }
     .scenario.passed { background: #d4edda; color: #155724; }
@@ -41,20 +41,49 @@
   <div id="featuresContainer"></div>
 
   <script>
+    // Fetch scenarios from backend and display them
+    async function loadScenarios() {
+      const res = await fetch('/scenarios');
+      const scenarios = await res.json();
+      const container = document.getElementById('featuresContainer');
+      container.innerHTML = '';
+      // Group scenarios by feature
+      const features = {};
+      scenarios.forEach(s => {
+        if (!features[s.feature]) features[s.feature] = {desc: s.feature_desc, scenarios: []};
+        features[s.feature].scenarios.push(s);
+      });
+      Object.entries(features).forEach(([feature, obj]) => {
+        const featureId = feature.replace(/\s+/g, '_');
+        const featureDiv = document.createElement('div');
+        featureDiv.className = 'feature';
+        featureDiv.id = featureId;
+        featureDiv.innerHTML = `<div class="feature-header">${feature}</div><div style="font-size:13px;color:#555;margin-bottom:8px;">${obj.desc}</div><div id="${featureId}_content" class="feature-content"></div>`;
+        container.appendChild(featureDiv);
+        obj.scenarios.forEach(s => {
+          const scenarioId = featureId + '_' + s.scenario.replace(/\s+/g, '_');
+          const scenarioDiv = document.createElement('div');
+          scenarioDiv.className = 'scenario';
+          scenarioDiv.id = scenarioId;
+          scenarioDiv.innerHTML = `<strong>${s.scenario}</strong><div style="font-size:13px;color:#555;margin-bottom:4px;">${s.scenario_desc}</div><ul style="margin:0 0 8px 18px;padding:0;">${s.steps.map(step => `<li>${step}</li>`).join('')}</ul><div class="steps"></div>`;
+          featureDiv.querySelector(`#${featureId}_content`).appendChild(scenarioDiv);
+        });
+      });
+    }
+
+    loadScenarios();
+
     const socket = io();
 
     function startTests() {
-      document.getElementById("featuresContainer").innerHTML = "";
+      // Reset only results, keep scenario list
+      document.querySelectorAll('.steps').forEach(el => el.innerHTML = '');
+      document.querySelectorAll('.scenario').forEach(el => el.className = 'scenario');
       document.getElementById("log").innerText = "";
       document.getElementById("features").innerText = "";
       document.getElementById("scenarios").innerText = "";
       document.getElementById("steps").innerText = "";
       socket.emit("start");
-    }
-
-    function toggleFeature(id) {
-      const content = document.getElementById(id + "_content");
-      content.style.display = (content.style.display === "none") ? "block" : "none";
     }
 
     socket.on("status", data => {
@@ -77,9 +106,7 @@
         featureDiv.id = featureId;
         featureDiv.className = "feature";
         featureDiv.innerHTML = `
-          <div class="feature-header" onclick="toggleFeature('${featureId}')">
-            ${data.feature}
-          </div>
+          <div class="feature-header">${data.feature}</div>
           <div id="${featureId}_content" class="feature-content"></div>
         `;
         document.getElementById("featuresContainer").appendChild(featureDiv);
